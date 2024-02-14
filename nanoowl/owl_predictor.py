@@ -450,10 +450,11 @@ class OwlPredictor(torch.nn.Module):
 
         args += [f"--shapes=image:1x3x{self.image_size}x{self.image_size}"]
         args += ["--verbose"]
+        print(args)
+        # subprocess.call(args)
 
-        subprocess.call(args)
-
-        return self.load_image_encoder_engine(engine_path, max_batch_size)
+        # return self.load_image_encoder_engine(engine_path, max_batch_size)
+        return True
 
     def predict(self, 
             image: PIL.Image, 
