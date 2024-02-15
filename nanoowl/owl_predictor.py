@@ -455,7 +455,7 @@ class OwlPredictor(torch.nn.Module):
         # subprocess.call(args, shell=True)
 
         # return self.load_image_encoder_engine(engine_path, max_batch_size)
-        retunr 0
+        return 0
 
     def predict(self, 
             image: PIL.Image, 
