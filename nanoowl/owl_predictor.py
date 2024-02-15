@@ -456,9 +456,9 @@ class OwlPredictor(torch.nn.Module):
         args += ["--verbose"]
             
         print(args)
-        # subprocess.call(args, shell=True)
+        subprocess.call(args)
 
-        # return self.load_image_encoder_engine(engine_path, max_batch_size)
+        return self.load_image_encoder_engine(engine_path, max_batch_size)
         return 0
 
     def predict(self, 
