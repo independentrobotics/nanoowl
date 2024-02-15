@@ -439,7 +439,7 @@ class OwlPredictor(torch.nn.Module):
     
     def build_image_encoder_engine(self, 
             engine_path: str, 
-            onnx_path: str.
+            onnx_path: str,
             max_batch_size: int = 1, 
             fp16_mode = True, 
         ):
