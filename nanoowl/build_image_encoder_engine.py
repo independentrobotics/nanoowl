@@ -31,7 +31,12 @@ if __name__ == "__main__":
     predictor = OwlPredictor(
         model_name=args.model_name
     )
-
+    
+    predictor.build_image_encoder_onnx(
+        args.onnx_path,
+        args.onnx_opset
+    )
+    
     predictor.build_image_encoder_engine(
         args.output_path,
         args.onnx_path,
