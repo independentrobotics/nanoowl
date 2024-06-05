@@ -38,37 +38,28 @@ def draw_owl_output(image, output: OwlDecodeOutput, text: List[str], draw_text=T
     if is_pil:
         image = np.array(image)
     font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.75
+    font_scale = 1.0
     colors = get_colors(len(text))
     num_detections = len(output.labels)
+    print(output)
 
     for i in range(num_detections):
         box = output.boxes[i]
         label_index = int(output.labels[i])
+        iou = float(output.scores[i])
         box = [int(x) for x in box]
         pt0 = (box[0], box[1])
         pt1 = (box[2], box[3])
-        cv2.rectangle(
-            image,
-            pt0,
-            pt1,
-            colors[label_index],
-            4
-        )
+
+        cv2.rectangle(image,pt0,pt1,colors[label_index],4)
+
         if draw_text:
-            offset_y = 12
-            offset_x = 0
             label_text = text[label_index]
-            cv2.putText(
-                image,
-                label_text,
-                (box[0] + offset_x, box[1] + offset_y),
-                font,
-                font_scale,
-                colors[label_index],
-                2,# thickness
-                cv2.LINE_AA
-            )
+            cv2.rectangle(image, (box[0]-2, box[1]-40), (box[0]+300, box[1]), colors[label_index], -1)
+            cv2.putText(image, f"{iou:.2f} |", (box[0]+10, box[1]-10), font, font_scale, (255,255,255),2)
+            cv2.putText(image,label_text,(box[0] + 115, box[1] -10),font,font_scale,(255,255,255),2)
+
     if is_pil:
         image = PIL.Image.fromarray(image)
+
     return image
