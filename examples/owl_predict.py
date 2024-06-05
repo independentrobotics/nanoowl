@@ -25,16 +25,14 @@ from nanoowl.owl_drawing import (
     draw_owl_output
 )
 
-
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", type=str, default="../assets/owl_glove_small.jpg")
     parser.add_argument("--prompt", type=str, default="an owl, a glove")
     parser.add_argument("--threshold", type=str, default="0.1,0.1")
-    parser.add_argument("--output", type=str, default="../data/owl_predict_out.jpg")
+    parser.add_argument("--output", type=str, default="/root/out/owl_predict_out.jpg")
     parser.add_argument("--model", type=str, default="google/owlvit-base-patch32")
-    parser.add_argument("--image_encoder_engine", type=str, default="../data/owl_image_encoder_patch32.engine")
     parser.add_argument("--profile", action="store_true")
     parser.add_argument("--num_profiling_runs", type=int, default=30)
     args = parser.parse_args()
@@ -51,7 +49,6 @@ if __name__ == "__main__":
 
     predictor = OwlPredictor(
         args.model,
-        image_encoder_engine=args.image_encoder_engine
     )
 
     image = PIL.Image.open(args.image)

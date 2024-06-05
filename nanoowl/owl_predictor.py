@@ -25,6 +25,9 @@ from transformers.models.owlvit.modeling_owlvit import OwlViTForObjectDetection
 from transformers.models.owlvit.processing_owlvit import OwlViTProcessor
 from dataclasses import dataclass
 from typing import List, Optional, Union, Tuple
+
+from ir_utils.filesystem_tools import get_dl_model_directory, create_dl_model_directory
+
 from .image_preprocessor import ImagePreprocessor
 
 __all__ = [
@@ -145,17 +148,22 @@ class OwlPredictor(torch.nn.Module):
     def __init__(self,
             model_name: str = "google/owlvit-base-patch32",
             device: str = "cuda",
-            image_encoder_engine: Optional[str] = None,
             image_encoder_engine_max_batch_size: int = 1,
             image_preprocessor: Optional[ImagePreprocessor] = None
         ):
 
         super().__init__()
 
+        try:
+            model_path = get_dl_model_directory("nanoowl")
+        except ValueError:
+            create_dl_model_directory("nanoowl")
+            model_path = get_dl_model_directory("nanoowl")
+
         self.image_size = _owl_get_image_size(model_name)
         self.device = device
-        self.model = OwlViTForObjectDetection.from_pretrained(model_name).to(self.device).eval()
-        self.processor = OwlViTProcessor.from_pretrained(model_name)
+        self.model = OwlViTForObjectDetection.from_pretrained(model_name, cache_dir=model_path).to(self.device).eval()
+        self.processor = OwlViTProcessor.from_pretrained(model_name, cache_dir=model_path)
         self.patch_size = _owl_get_patch_size(model_name)
         self.num_patches_per_side = self.image_size // self.patch_size
         self.box_bias = _owl_compute_box_bias(self.num_patches_per_side).to(self.device)
@@ -166,10 +174,19 @@ class OwlPredictor(torch.nn.Module):
                 torch.linspace(0., 1., self.image_size)
             )
         ).to(self.device).float()
-        self.image_encoder_engine = None
-        if image_encoder_engine is not None:
-            image_encoder_engine = OwlPredictor.load_image_encoder_engine(image_encoder_engine, image_encoder_engine_max_batch_size)
-        self.image_encoder_engine = image_encoder_engine
+
+        onnx_path = model_path + 'owl_image_encoder.onnx'
+        engine_path = model_path + 'owl_image_encoder_patch32.engine'
+        if not os.path.exists(engine_path):
+            print("Building image encoder engine.")
+            self.build_image_encoder_onnx(onnx_path, 16)
+            self.build_image_encoder_engine(engine_path, onnx_path, True)
+        else:
+            print("Image encoder engine found!")
+
+        self.image_encoder_engine = OwlPredictor.load_image_encoder_engine(engine_path, image_encoder_engine_max_batch_size)
+
+
         self.image_preprocessor = image_preprocessor.to(self.device).eval() if image_preprocessor else ImagePreprocessor().to(self.device).eval()
 
     def get_num_patches(self):

@@ -24,7 +24,7 @@ from typing import List
 
 
 def get_colors(count: int):
-    cmap = plt.cm.get_cmap("rainbow", count)
+    cmap = plt.get_cmap("rainbow", count)
     colors = []
     for i in range(count):
         color = cmap(i)
@@ -34,9 +34,9 @@ def get_colors(count: int):
 
 
 def draw_owl_output(image, output: OwlDecodeOutput, text: List[str], draw_text=True):
-    is_pil = not isinstance(image, np.ndarray)
+    is_pil = not isinstance(image, np.ndarray) # That isn't really an accurate measurement...
     if is_pil:
-        image = np.asarray(image)
+        image = np.array(image)
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = 0.75
     colors = get_colors(len(text))
