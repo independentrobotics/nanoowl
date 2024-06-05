@@ -18,6 +18,7 @@ import argparse
 import PIL.Image
 import time
 import torch
+import cv2
 from nanoowl.owl_predictor import (
     OwlPredictor
 )
@@ -29,17 +30,13 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", type=str, default="../assets/owl_glove_small.jpg")
-    parser.add_argument("--prompt", type=str, default="an owl, a glove")
-    parser.add_argument("--threshold", type=str, default="0.1,0.1")
-    parser.add_argument("--output", type=str, default="/root/out/owl_predict_out.jpg")
+    parser.add_argument("--query", type=str, default="../assets/owl_target_1.jpg")
+    parser.add_argument("--threshold", type=str, default="0.25")
+    parser.add_argument("--output", type=str, default="/root/out/owl_predict_image_guided_out.jpg")
     parser.add_argument("--model", type=str, default="google/owlvit-base-patch32")
     parser.add_argument("--profile", action="store_true")
     parser.add_argument("--num_profiling_runs", type=int, default=30)
     args = parser.parse_args()
-
-    prompt = args.prompt.strip("][()")
-    text = prompt.split(',')
-    print(text)
 
     thresholds = args.threshold.strip("][()")
     thresholds = thresholds.split(',')
@@ -52,10 +49,11 @@ if __name__ == "__main__":
     )
 
     image = PIL.Image.open(args.image)
+    query_image = [cv2.imread(args.query)]
 
     output = predictor.predict(
         image=image, 
-        target=text, 
+        target=query_image, 
         threshold=thresholds,
         pad_square=False
     )
@@ -66,7 +64,7 @@ if __name__ == "__main__":
         for i in range(args.num_profiling_runs):
             output = predictor.predict(
                 image=image, 
-                target=text, 
+                target=query_image, 
                 threshold=thresholds,
                 pad_square=False
             )
@@ -75,6 +73,6 @@ if __name__ == "__main__":
         dt = (t1 - t0) / 1e9
         print(f"PROFILING FPS: {args.num_profiling_runs/dt}")
 
-    image = draw_owl_output(image, output, text=text, draw_text=True)
+    image = draw_owl_output(image, output, text=['object'])
 
     image.save(args.output)

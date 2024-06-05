@@ -1,6 +1,5 @@
 docker run \
     -it \
-    --env DISPLAY=localhost:10.0 \
     --gpus all \
     --net=host \
     --ipc=host \
@@ -10,4 +9,4 @@ docker run \
     --volume="$HOME/IndependentRobotics:/root/IndependentRobotics" \
     --volume="$1:/root/out" \
     nanoowl:latest \
-    /bin/bash
+    /usr/bin/python3 /root/owl_predict.py --image /opt/nanoowl/assets/owl_glove_small.jpg "${@:2}"

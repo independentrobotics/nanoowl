@@ -17,6 +17,7 @@
 import torch
 import PIL.Image
 import numpy as np
+import numpy.typing as npt
 from typing import Tuple
 
 
@@ -65,11 +66,27 @@ class ImagePreprocessor(torch.nn.Module):
             image = (image - self.mean) / self.std
 
         return image
-    
+    def preprocess_image(self, image:PIL.Image.Image | npt.NDArray):
+        if isinstance(image, PIL.Image.Image):
+            return self.preprocess_pil_image(image)
+        else:
+            return self.preprocess_cv_image(image)
+
     @torch.no_grad()
     def preprocess_pil_image(self, image: PIL.Image.Image):
+        h = image.height
+        w = image.width
         image = torch.from_numpy(np.asarray(image))
         image = image.permute(2, 0, 1)[None, ...]
         image = image.to(self.mean.device)
         image = image.type(self.mean.dtype)
-        return self.forward(image, inplace=True)
+        return self.forward(image, inplace=True), h, w
+
+    @torch.no_grad()
+    def preprocess_cv_image(self, image: npt.NDArray):
+        h,w = image.shape[:2]
+        image = torch.from_numpy(image)
+        image = image.permute(2, 0, 1)[None, ...]
+        image = image.to(self.mean.device)
+        image = image.type(self.mean.dtype)
+        return self.forward(image, inplace=True), h, w

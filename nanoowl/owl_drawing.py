@@ -20,7 +20,7 @@ import cv2
 from .owl_predictor import OwlDecodeOutput
 import matplotlib.pyplot as plt
 import numpy as np
-from typing import List
+from typing import List, Optional
 
 
 def get_colors(count: int):
@@ -33,15 +33,19 @@ def get_colors(count: int):
     return colors
 
 
-def draw_owl_output(image, output: OwlDecodeOutput, text: List[str], draw_text=True):
+def draw_owl_output(image, output: OwlDecodeOutput, text: Optional[List[str]] = None, draw_text=True):
     is_pil = not isinstance(image, np.ndarray) # That isn't really an accurate measurement...
     if is_pil:
         image = np.array(image)
+
+    if not text:
+        text = ['']
+        draw_text = False
+    
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = 1.0
     colors = get_colors(len(text))
     num_detections = len(output.labels)
-    print(output)
 
     for i in range(num_detections):
         box = output.boxes[i]

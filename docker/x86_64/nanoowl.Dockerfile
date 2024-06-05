@@ -46,6 +46,8 @@ RUN cd nanoowl && \
     python3 -m pip install .  
 
 RUN cp /opt/nanoowl/examples/owl_predict.py /root/owl_predict.py
+RUN cp /opt/nanoowl/examples/owl_image_predict.py /root/owl_image_predict.py
+RUN cp /opt/nanoowl/examples/fish_test.py /root/fish_test.py
 WORKDIR /root
 #################################
 # Github version: We clone from Github

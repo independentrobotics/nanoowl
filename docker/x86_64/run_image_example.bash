@@ -9,4 +9,4 @@ docker run \
     --volume="$HOME/IndependentRobotics:/root/IndependentRobotics" \
     --volume="$1:/root/out" \
     nanoowl:latest \
-    /usr/bin/python3 /root/owl_predict.py "${@:2}"
+    /usr/bin/python3 /root/owl_image_predict.py --image /opt/nanoowl/assets/owl_glove_small.jpg --query /opt/nanoowl/assets/owl_target_2.png "${@:2}"

@@ -24,7 +24,8 @@ from torchvision.ops import roi_align
 from transformers.models.owlvit.modeling_owlvit import OwlViTForObjectDetection
 from transformers.models.owlvit.processing_owlvit import OwlViTProcessor
 from dataclasses import dataclass
-from typing import List, Optional, Union, Tuple
+from typing import List, Optional, Union, Tuple, overload
+import numpy.typing as npt
 
 from ir_utils.filesystem_tools import get_dl_model_directory, create_dl_model_directory
 
@@ -124,7 +125,6 @@ class OwlEncodeTextOutput:
         return OwlEncodeTextOutput(
             text_embeds=self.text_embeds[start_index:end_index]
         )
-
 
 @dataclass
 class OwlEncodeImageOutput:
@@ -478,23 +478,79 @@ class OwlPredictor(torch.nn.Module):
         return self.load_image_encoder_engine(engine_path, max_batch_size)
         return 0
 
-    def predict(self, 
-            image: PIL.Image, 
-            text: List[str], 
-            text_encodings: Optional[OwlEncodeTextOutput],
+
+    @overload
+    def predict(self,
+            image: PIL.Image.Image | npt.NDArray, 
+            target: List[str], 
             threshold: Union[int, float, List[Union[int, float]]] = 0.1,
             pad_square: bool = True,
-            
+        ) -> OwlDecodeOutput:
+        ... 
+    
+    @overload
+    def predict(self,
+            image: PIL.Image.Image | npt.NDArray, 
+            target: List[PIL.Image.Image] | List[npt.NDArray], 
+            threshold: Union[int, float, List[Union[int, float]]] = 0.1,
+            pad_square: bool = True,
+        ) -> OwlDecodeOutput:
+        ... 
+
+    def predict(self, 
+            image: PIL.Image.Image | npt.NDArray, 
+            target: List[str] | List[PIL.Image.Image] | List[npt.NDArray], 
+            threshold: Union[int, float, List[Union[int, float]]] = 0.1,
+            pad_square: bool = True,
         ) -> OwlDecodeOutput:
 
-        image_tensor = self.image_preprocessor.preprocess_pil_image(image)
+        text_guided = isinstance(target[0], str)
 
-        if text_encodings is None:
-            text_encodings = self.encode_text(text)
+        if text_guided:
+            image_tensor, im_height, im_width = self.image_preprocessor.preprocess_image(image)
+            text_encodings = self.encode_text(target)
 
-        rois = torch.tensor([[0, 0, image.height, image.width]], dtype=image_tensor.dtype, device=image_tensor.device)
+            rois = torch.tensor([[0, 0, im_height, im_width]], dtype=image_tensor.dtype, device=image_tensor.device)
+            image_encodings = self.encode_rois(image_tensor, rois, pad_square=pad_square)
 
-        image_encodings = self.encode_rois(image_tensor, rois, pad_square=pad_square)
+            return self.decode(image_encodings, text_encodings, threshold)
 
-        return self.decode(image_encodings, text_encodings, threshold)
+        else:
+            # Image guided OWL!
+            inputs = self.processor(images=image, query_images=target, return_tensors="pt")
 
+            #KLUDGE Not sure how to manage multiple query image thresholds atm, so lets just average them.
+            thresh = np.mean(threshold)
+
+            pixel_values = inputs['pixel_values'].to(self.device)
+            query_pixel_values = inputs['query_pixel_values'].to(self.device)
+
+            with torch.no_grad():
+                outputs = self.model.image_guided_detection(pixel_values=pixel_values, query_pixel_values=query_pixel_values)
+
+            # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
+            if isinstance(image, PIL.Image.Image):
+                target_sizes = torch.Tensor([image.size[::-1]]*len(target))
+            else:
+                target_sizes = torch.Tensor([image.shape[0:2]]*len(target))
+            # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
+            results = self.processor.post_process_image_guided_detection(outputs=outputs, threshold=thresh, nms_threshold=0.3, target_sizes=target_sizes)
+
+            labels = []
+            scores = []
+            boxes = []
+            input_indices = []
+            for k, res in enumerate(results):
+                blist = res['boxes'].cpu().numpy().tolist()
+                boxes.extend(blist)
+                scores.extend(res['scores'].cpu().numpy().tolist())
+                labels.extend([k] * len(blist))
+                input_indices.extend([0] * len(blist))
+
+            return OwlDecodeOutput(
+                labels = labels,
+                scores = scores,
+                boxes = boxes,
+                input_indices = input_indices
+            )
+            
