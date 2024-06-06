@@ -18,7 +18,7 @@ import json
 from enum import Enum
 from typing import List, Optional, Mapping
 from .clip_predictor import ClipEncodeTextOutput
-from .owl_predictor import OwlEncodeTextOutput
+from .owl_predictor import OwlEncodeTextQuerryOutput
 
 
 __all__ = [

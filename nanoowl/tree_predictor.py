@@ -15,7 +15,7 @@
 
 
 from .tree import Tree, TreeOp
-from .owl_predictor import OwlPredictor, OwlEncodeTextOutput, OwlEncodeImageOutput
+from .owl_predictor import OwlPredictor, OwlEncodeTextQuerryOutput, OwlEncodeImageOutput
 from .clip_predictor import ClipPredictor, ClipEncodeTextOutput, ClipEncodeImageOutput
 from .image_preprocessor import ImagePreprocessor
 
@@ -63,12 +63,12 @@ class TreePredictor(torch.nn.Module):
             label_encodings[label_indices[i]] = text_encodings.slice(i, i+1)
         return label_encodings
     
-    def encode_owl_text(self, tree: Tree) -> Dict[int, OwlEncodeTextOutput]:
+    def encode_owl_text(self, tree: Tree) -> Dict[int, OwlEncodeTextQuerryOutput]:
         label_indices = tree.get_detect_label_indices()
         if len(label_indices) == 0:
             return {}
         labels = [tree.labels[index] for index in label_indices]
-        text_encodings = self.owl_predictor.encode_text(labels)
+        text_encodings = self.owl_predictor.encode_query_text(labels)
         label_encodings = {}
         for i in range(len(labels)):
             label_encodings[label_indices[i]] = text_encodings.slice(i, i+1)
@@ -80,7 +80,7 @@ class TreePredictor(torch.nn.Module):
             tree: Tree, 
             threshold: float = 0.1,
             clip_text_encodings: Optional[Dict[int, ClipEncodeTextOutput]] = None,
-            owl_text_encodings: Optional[Dict[int, OwlEncodeTextOutput]] = None
+            owl_text_encodings: Optional[Dict[int, OwlEncodeTextQuerryOutput]] = None
         ):
 
         if clip_text_encodings is None:
@@ -132,7 +132,7 @@ class TreePredictor(torch.nn.Module):
                     raise RuntimeError("Missing owl image encodings for node.")
 
                 # gather encodings
-                owl_text_encodings_for_node = OwlEncodeTextOutput(
+                owl_text_encodings_for_node = OwlEncodeTextQuerryOutput(
                     text_embeds=torch.cat([
                         owl_text_encodings[i].text_embeds for i in node.outputs
                     ], dim=0)

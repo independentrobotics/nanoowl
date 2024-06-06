@@ -23,7 +23,7 @@ from nanoowl.owl_predictor import (
     OwlPredictor
 )
 from nanoowl.owl_drawing import (
-    draw_owl_output
+    markup_image
 )
 
 if __name__ == "__main__":
@@ -32,16 +32,14 @@ if __name__ == "__main__":
     parser.add_argument("--image", type=str, default="../assets/owl_glove_small.jpg")
     parser.add_argument("--query", type=str, default="../assets/owl_target_1.jpg")
     parser.add_argument("--threshold", type=str, default="0.25")
-    parser.add_argument("--output", type=str, default="/root/out/owl_predict_image_guided_out.jpg")
+    parser.add_argument("--output", type=str, default="/root/out/owl_image_guided_out.jpg")
     parser.add_argument("--model", type=str, default="google/owlvit-base-patch32")
     parser.add_argument("--profile", action="store_true")
     parser.add_argument("--num_profiling_runs", type=int, default=30)
     args = parser.parse_args()
 
-    thresholds = args.threshold.strip("][()")
-    thresholds = thresholds.split(',')
-    thresholds = [float(x) for x in thresholds]
-    print(thresholds)
+    threshold = float(args.threshold)
+    print(threshold)
     
 
     predictor = OwlPredictor(
@@ -51,10 +49,10 @@ if __name__ == "__main__":
     image = PIL.Image.open(args.image)
     query_image = [cv2.imread(args.query)]
 
-    output = predictor.predict(
+    output = predictor.detect_from_img(
         image=image, 
-        target=query_image, 
-        threshold=thresholds,
+        query_imgs=query_image, 
+        threshold=threshold,
         pad_square=False
     )
 
@@ -62,10 +60,10 @@ if __name__ == "__main__":
         torch.cuda.current_stream().synchronize()
         t0 = time.perf_counter_ns()
         for i in range(args.num_profiling_runs):
-            output = predictor.predict(
+            output = predictor.detect_from_img(
                 image=image, 
-                target=query_image, 
-                threshold=thresholds,
+                query_imgs=query_image, 
+                threshold=threshold,
                 pad_square=False
             )
         torch.cuda.current_stream().synchronize()
@@ -73,6 +71,6 @@ if __name__ == "__main__":
         dt = (t1 - t0) / 1e9
         print(f"PROFILING FPS: {args.num_profiling_runs/dt}")
 
-    image = draw_owl_output(image, output, text=['object'])
+    image = markup_image(image, output, draw_text=True)
 
     image.save(args.output)

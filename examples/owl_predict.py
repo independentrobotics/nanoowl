@@ -22,7 +22,7 @@ from nanoowl.owl_predictor import (
     OwlPredictor
 )
 from nanoowl.owl_drawing import (
-    draw_owl_output
+    markup_image
 )
 
 if __name__ == "__main__":
@@ -31,7 +31,7 @@ if __name__ == "__main__":
     parser.add_argument("--image", type=str, default="../assets/owl_glove_small.jpg")
     parser.add_argument("--prompt", type=str, default="an owl, a glove")
     parser.add_argument("--threshold", type=str, default="0.1,0.1")
-    parser.add_argument("--output", type=str, default="/root/out/owl_predict_out.jpg")
+    parser.add_argument("--output", type=str, default="/root/out/owl_text_guided_out.jpg")
     parser.add_argument("--model", type=str, default="google/owlvit-base-patch32")
     parser.add_argument("--profile", action="store_true")
     parser.add_argument("--num_profiling_runs", type=int, default=30)
@@ -53,9 +53,9 @@ if __name__ == "__main__":
 
     image = PIL.Image.open(args.image)
 
-    output = predictor.predict(
+    output = predictor.detect_from_text(
         image=image, 
-        target=text, 
+        query_text=text, 
         threshold=thresholds,
         pad_square=False
     )
@@ -64,9 +64,9 @@ if __name__ == "__main__":
         torch.cuda.current_stream().synchronize()
         t0 = time.perf_counter_ns()
         for i in range(args.num_profiling_runs):
-            output = predictor.predict(
+            output = predictor.detect_from_text(                
                 image=image, 
-                target=text, 
+                query_text=text, 
                 threshold=thresholds,
                 pad_square=False
             )
@@ -75,6 +75,6 @@ if __name__ == "__main__":
         dt = (t1 - t0) / 1e9
         print(f"PROFILING FPS: {args.num_profiling_runs/dt}")
 
-    image = draw_owl_output(image, output, text=text, draw_text=True)
+    image = markup_image(image, output, text=text, draw_text=True)
 
     image.save(args.output)

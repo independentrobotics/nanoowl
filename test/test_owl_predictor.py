@@ -30,7 +30,7 @@ def test_owl_predictor_encode_text():
 
     owl_predictor = OwlPredictor()
 
-    text_encode_output = owl_predictor.encode_text(["a frog", "a dog"])
+    text_encode_output = owl_predictor.encode_query_text(["a frog", "a dog"])
 
     assert text_encode_output.text_embeds.shape == (2, 512)
 
@@ -63,7 +63,7 @@ def test_owl_predictor_decode():
 
     image_tensor = image_preprocessor.preprocess_pil_image(image)
 
-    text_output = owl_predictor.encode_text(["an owl"])
+    text_output = owl_predictor.encode_query_text(["an owl"])
     image_output = owl_predictor.encode_image(image_tensor)
 
     classify_output = owl_predictor.decode(image_output, text_output)
@@ -93,7 +93,7 @@ def test_owl_predictor_decode_multiple_images():
 
     images = torch.cat(images, dim=0)
 
-    text_output = owl_predictor.encode_text(["an owl", "a frog"])
+    text_output = owl_predictor.encode_query_text(["an owl", "a frog"])
     image_output = owl_predictor.encode_image(images)
 
     decode_output = owl_predictor.decode(image_output, text_output)

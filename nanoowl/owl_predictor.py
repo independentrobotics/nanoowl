@@ -33,7 +33,7 @@ from .image_preprocessor import ImagePreprocessor
 
 __all__ = [
     "OwlPredictor",
-    "OwlEncodeTextOutput",
+    "OwlEncodeTextQuerryOutput",
     "OwlEncodeImageOutput",
     "OwlDecodeOutput"
 ]
@@ -118,13 +118,17 @@ def _owl_box_roi_to_box_global(boxes, rois):
 
 
 @dataclass
-class OwlEncodeTextOutput:
+class OwlEncodeTextQuerryOutput:
     text_embeds: torch.Tensor
 
     def slice(self, start_index, end_index):
-        return OwlEncodeTextOutput(
+        return OwlEncodeTextQuerryOutput(
             text_embeds=self.text_embeds[start_index:end_index]
         )
+    
+@dataclass
+class OwlEncodeImgQuerryOutput:
+    pixel_embeds: torch.Tensor
 
 @dataclass
 class OwlEncodeImageOutput:
@@ -137,10 +141,10 @@ class OwlEncodeImageOutput:
 
 @dataclass
 class OwlDecodeOutput:
-    labels: torch.Tensor
-    scores: torch.Tensor
-    boxes: torch.Tensor
-    input_indices: torch.Tensor
+    labels: List[int]
+    scores: List[float]
+    boxes: List[List[int]]
+    input_indices: List[int]
 
 
 class OwlPredictor(torch.nn.Module):
@@ -175,6 +179,8 @@ class OwlPredictor(torch.nn.Module):
             )
         ).to(self.device).float()
 
+        self.cached_embeds = {}
+
         onnx_path = model_path + 'owl_image_encoder.onnx'
         engine_path = model_path + 'owl_image_encoder_patch32.engine'
         if not os.path.exists(engine_path):
@@ -198,14 +204,19 @@ class OwlPredictor(torch.nn.Module):
     def get_image_size(self):
         return (self.image_size, self.image_size)
     
-    def encode_text(self, text: List[str]) -> OwlEncodeTextOutput:
+    def encode_query_text(self, text: List[str]) -> OwlEncodeTextQuerryOutput:
         text_input = self.processor(text=text, return_tensors="pt")
         input_ids = text_input['input_ids'].to(self.device)
         attention_mask = text_input['attention_mask'].to(self.device)
         text_outputs = self.model.owlvit.text_model(input_ids, attention_mask)
         text_embeds = text_outputs[1]
         text_embeds = self.model.owlvit.text_projection(text_embeds)
-        return OwlEncodeTextOutput(text_embeds=text_embeds)
+        return OwlEncodeTextQuerryOutput(text_embeds=text_embeds)
+    
+    def encode_query_img(self, query_imgs: List[npt.NDArray] | List[PIL.Image.Image]) -> OwlEncodeImgQuerryOutput:
+        inputs = self.processor(query_images=query_imgs, return_tensors="pt")
+        query_pixel_values = inputs['query_pixel_values'].to(self.device)
+        return OwlEncodeImgQuerryOutput(pixel_embeds=query_pixel_values)
 
     def encode_image_torch(self, image: torch.Tensor) -> OwlEncodeImageOutput:
         
@@ -246,6 +257,20 @@ class OwlPredictor(torch.nn.Module):
             return self.encode_image_trt(image)
         else:
             return self.encode_image_torch(image)
+        
+    def cache_embed(self, key:str, embed: OwlEncodeImageOutput | OwlEncodeImgQuerryOutput | OwlEncodeTextQuerryOutput) -> None:
+        self.cached_embeds[key] = embed
+        
+    def get_cached_embed(self, key: str) -> Tuple[bool, Union[OwlEncodeImageOutput, OwlEncodeImgQuerryOutput, OwlEncodeTextQuerryOutput  | None]]:
+        if key in self.cached_embeds:
+            return True, self.cached_embeds[key]
+        else:
+            return False, None
+            
+        
+    def clear_cached_embeds(self) -> None:
+        self.cached_embeds = {}
+        return 
 
     def extract_rois(self, image: torch.Tensor, rois: torch.Tensor, pad_square: bool = True, padding_scale: float = 1.0):
         if len(rois) == 0:
@@ -290,7 +315,7 @@ class OwlPredictor(torch.nn.Module):
 
     def decode(self, 
             image_output: OwlEncodeImageOutput, 
-            text_output: OwlEncodeTextOutput,
+            text_output: OwlEncodeTextQuerryOutput,
             threshold: Union[int, float, List[Union[int, float]]] = 0.1,
         ) -> OwlDecodeOutput:
 
@@ -325,10 +350,10 @@ class OwlPredictor(torch.nn.Module):
         input_indices = input_indices[:, None].repeat(1, self.num_patches)
 
         return OwlDecodeOutput(
-            labels=labels[mask],
-            scores=scores[mask],
-            boxes=image_output.pred_boxes[mask],
-            input_indices=input_indices[mask]
+            labels=labels[mask].detach().cpu().numpy().tolist(),
+            scores=scores[mask].detach().cpu().numpy().tolist(),
+            boxes=image_output.pred_boxes[mask].detach().cpu().numpy().tolist(),
+            input_indices=input_indices[mask].detach().cpu().numpy().tolist()
         )
 
     @staticmethod
@@ -476,81 +501,92 @@ class OwlPredictor(torch.nn.Module):
         subprocess.call(args)
 
         return self.load_image_encoder_engine(engine_path, max_batch_size)
-        return 0
-
-
-    @overload
-    def predict(self,
-            image: PIL.Image.Image | npt.NDArray, 
-            target: List[str], 
-            threshold: Union[int, float, List[Union[int, float]]] = 0.1,
-            pad_square: bool = True,
-        ) -> OwlDecodeOutput:
-        ... 
     
-    @overload
-    def predict(self,
-            image: PIL.Image.Image | npt.NDArray, 
-            target: List[PIL.Image.Image] | List[npt.NDArray], 
+    def detect_from_text(self, 
+            image: PIL.Image.Image | npt.NDArray,
+            query_text: Optional[List[str]] = None, 
+            query_text_embeds: Optional[OwlEncodeTextQuerryOutput] = None,
             threshold: Union[int, float, List[Union[int, float]]] = 0.1,
             pad_square: bool = True,
-        ) -> OwlDecodeOutput:
-        ... 
-
-    def predict(self, 
-            image: PIL.Image.Image | npt.NDArray, 
-            target: List[str] | List[PIL.Image.Image] | List[npt.NDArray], 
-            threshold: Union[int, float, List[Union[int, float]]] = 0.1,
-            pad_square: bool = True,
+            cache_querry_embeds: bool = True,
         ) -> OwlDecodeOutput:
 
-        text_guided = isinstance(target[0], str)
-
-        if text_guided:
-            image_tensor, im_height, im_width = self.image_preprocessor.preprocess_image(image)
-            text_encodings = self.encode_text(target)
-
-            rois = torch.tensor([[0, 0, im_height, im_width]], dtype=image_tensor.dtype, device=image_tensor.device)
-            image_encodings = self.encode_rois(image_tensor, rois, pad_square=pad_square)
-
-            return self.decode(image_encodings, text_encodings, threshold)
-
-        else:
-            # Image guided OWL!
-            inputs = self.processor(images=image, query_images=target, return_tensors="pt")
-
-            #KLUDGE Not sure how to manage multiple query image thresholds atm, so lets just average them.
-            thresh = np.mean(threshold)
-
-            pixel_values = inputs['pixel_values'].to(self.device)
-            query_pixel_values = inputs['query_pixel_values'].to(self.device)
-
-            with torch.no_grad():
-                outputs = self.model.image_guided_detection(pixel_values=pixel_values, query_pixel_values=query_pixel_values)
-
-            # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
-            if isinstance(image, PIL.Image.Image):
-                target_sizes = torch.Tensor([image.size[::-1]]*len(target))
+        # If we get query text embeds, we should use them. Otherwise, we need to check if we have either
+        # cached embeds or query text. 
+        if not query_text_embeds:
+            key = f"tg_query_text"
+            exists, text_embed = self.get_cached_embed(key)
+            if exists:
+                query_embed = text_embed
+            elif query_text:
+                query_embed = self.encode_query_text(query_text)
+                if cache_querry_embeds:
+                    self.cache_embed(key, query_embed)
             else:
-                target_sizes = torch.Tensor([image.shape[0:2]]*len(target))
-            # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
-            results = self.processor.post_process_image_guided_detection(outputs=outputs, threshold=thresh, nms_threshold=0.3, target_sizes=target_sizes)
+                raise ValueError("No query text or query text embeding has been passed to the function, and no query text embedding is cached. ")
 
-            labels = []
-            scores = []
-            boxes = []
-            input_indices = []
-            for k, res in enumerate(results):
-                blist = res['boxes'].cpu().numpy().tolist()
-                boxes.extend(blist)
-                scores.extend(res['scores'].cpu().numpy().tolist())
-                labels.extend([k] * len(blist))
-                input_indices.extend([0] * len(blist))
+        image_tensor, im_height, im_width = self.image_preprocessor.preprocess_image(image)
+        
+        rois = torch.tensor([[0, 0, im_height, im_width]], dtype=image_tensor.dtype, device=image_tensor.device)
+        image_encodings = self.encode_rois(image_tensor, rois, pad_square=pad_square)
 
-            return OwlDecodeOutput(
-                labels = labels,
-                scores = scores,
-                boxes = boxes,
-                input_indices = input_indices
-            )
+        return self.decode(image_encodings, query_embed, threshold)
+
+    def detect_from_img(self, 
+            image: PIL.Image.Image | npt.NDArray, 
+            query_imgs: Optional[List[PIL.Image.Image] | List[npt.NDArray]] = None, 
+            query_img_embeds: Optional[OwlEncodeTextQuerryOutput] = None,
+            threshold: Union[int, float, List[float]] = 0.1,
+            pad_square: bool = True,
+            cache_querry_embeds: bool = True,
+        ) -> OwlDecodeOutput:
+
+        if isinstance(threshold, list):
+            raise NotImplementedError("Image-guided detection does not currently support more than one threshold value, even if you have multiple query images, sorry.")
+
+        if not query_img_embeds:
+            key = f"ig_query_imgs"
+            exists, qimg = self.get_cached_embed(key)
+            if exists:
+                query_embed = qimg
+            elif query_imgs:
+                query_embed = self.encode_query_img(query_imgs)
+                if cache_querry_embeds:
+                    self.cache_embed(key, query_embed)
+            else:
+                raise ValueError("No query iamge or query image embeding has been passed to the function, and no query image embedding is cached. ")            
+
+        # Image guided OWL!
+        inputs = self.processor(images=image, return_tensors="pt")
+        image_embed = inputs['pixel_values'].to(self.device)
+        n_targets = len(query_imgs) if query_imgs else print(query_embed)
+
+        with torch.no_grad():
+            outputs = self.model.image_guided_detection(pixel_values=image_embed, query_pixel_values=query_embed.pixel_embeds)
+
+        # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
+        if isinstance(image, PIL.Image.Image):
+            target_sizes = torch.Tensor([image.size[::-1]]*n_targets)
+        else:
+            target_sizes = torch.Tensor([image.shape[0:2]]*n_targets)
+        # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
+        results = self.processor.post_process_image_guided_detection(outputs=outputs, threshold=threshold, nms_threshold=0.3, target_sizes=target_sizes)
+
+        labels = []
+        scores = []
+        boxes = []
+        input_indices = []
+        for k, res in enumerate(results):
+            blist = res['boxes'].cpu().numpy().tolist()
+            boxes.extend(blist)
+            scores.extend(res['scores'].cpu().numpy().tolist())
+            labels.extend([k] * len(blist))
+            input_indices.extend([0] * len(blist))
+
+        return OwlDecodeOutput(
+            labels = labels,
+            scores = scores,
+            boxes = boxes,
+            input_indices = input_indices
+        )
             

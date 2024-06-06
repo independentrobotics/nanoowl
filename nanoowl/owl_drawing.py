@@ -33,19 +33,22 @@ def get_colors(count: int):
     return colors
 
 
-def draw_owl_output(image, output: OwlDecodeOutput, text: Optional[List[str]] = None, draw_text=True):
-    is_pil = not isinstance(image, np.ndarray) # That isn't really an accurate measurement...
+def markup_image(image, output: OwlDecodeOutput, text: Optional[List[str]] = None, draw_text=True):
+    is_pil = isinstance(image,PIL.Image.Image)
     if is_pil:
         image = np.array(image)
 
+    num_detections = len(output.labels)
+
     if not text:
-        text = ['']
-        draw_text = False
-    
+        if draw_text:
+            text = [f"object-{idx}" for idx in output.labels]
+        else:
+            draw_text = False
+
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = 1.0
-    colors = get_colors(len(text))
-    num_detections = len(output.labels)
+    colors = get_colors(len(np.unique(output.labels)))
 
     for i in range(num_detections):
         box = output.boxes[i]
@@ -56,11 +59,11 @@ def draw_owl_output(image, output: OwlDecodeOutput, text: Optional[List[str]] = 
         pt1 = (box[2], box[3])
 
         cv2.rectangle(image,pt0,pt1,colors[label_index],4)
+        cv2.rectangle(image, (box[0]-2, box[1]-40), (box[0]+300, box[1]), colors[label_index], -1)
+        cv2.putText(image, f"{iou:.2f} |", (box[0]+10, box[1]-10), font, font_scale, (255,255,255),2)
 
         if draw_text:
             label_text = text[label_index]
-            cv2.rectangle(image, (box[0]-2, box[1]-40), (box[0]+300, box[1]), colors[label_index], -1)
-            cv2.putText(image, f"{iou:.2f} |", (box[0]+10, box[1]-10), font, font_scale, (255,255,255),2)
             cv2.putText(image,label_text,(box[0] + 115, box[1] -10),font,font_scale,(255,255,255),2)
 
     if is_pil:
