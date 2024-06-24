@@ -1,6 +1,6 @@
 TARGET=$1
-IR_UTILS=/home/michael/code/ir_utils/
-NANOOWL=/home/michael/code/nanoowl/
+IR_UTILS=$HOME/code/ir_utils/
+NANOOWL=$HOME/code/nanoowl/
 
 docker build --tag nanoowl --file ./nanoowl.Dockerfile \
     --target=$TARGET \
