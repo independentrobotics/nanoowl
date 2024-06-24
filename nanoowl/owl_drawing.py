@@ -33,12 +33,20 @@ def get_colors(count: int):
     return colors
 
 
-def markup_image(image, output: OwlDecodeOutput, text: Optional[List[str]] = None, draw_text=True):
+def markup_image(image, output: OwlDecodeOutput, text: Optional[List[str]] = None, draw_text=True, redact=False):
     is_pil = isinstance(image,PIL.Image.Image)
     if is_pil:
         image = np.array(image)
 
+    if redact:
+        h,w = image.shape[:2]
+        image = cv2.resize(image, (32,32), interpolation=cv2.INTER_LINEAR)
+        image = cv2.resize(image, (w,h), interpolation=cv2.INTER_NEAREST)
+
     num_detections = len(output.labels)
+    if num_detections == 0:
+        return image
+
 
     if not text:
         if draw_text:
@@ -48,7 +56,7 @@ def markup_image(image, output: OwlDecodeOutput, text: Optional[List[str]] = Non
 
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = 1.0
-    colors = get_colors(len(np.unique(output.labels)))
+    colors = get_colors(np.max(output.labels) + 1)
 
     for i in range(num_detections):
         box = output.boxes[i]

@@ -147,6 +147,17 @@ class OwlDecodeOutput:
     input_indices: List[int]
 
 
+def top_filter_detections(detections, thresh=0.9999):
+    num_detections = len(detections.labels)
+
+    for k in reversed(range(num_detections)):
+        if detections.scores[k] > thresh:
+            del detections.labels[k]
+            del detections.scores[k]
+            del detections.boxes[k]
+            del detections.input_indices[k]
+    return detections
+
 class OwlPredictor(torch.nn.Module):
     
     def __init__(self,
@@ -554,7 +565,7 @@ class OwlPredictor(torch.nn.Module):
                 if cache_querry_embeds:
                     self.cache_embed(key, query_embed)
             else:
-                raise ValueError("No query iamge or query image embeding has been passed to the function, and no query image embedding is cached. ")            
+                raise ValueError("No query image or query image embeding has been passed to the function, and no query image embedding is cached. ")            
 
         # Image guided OWL!
         inputs = self.processor(images=image, return_tensors="pt")
