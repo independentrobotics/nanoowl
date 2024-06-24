@@ -33,10 +33,12 @@ def get_colors(count: int):
     return colors
 
 
-def markup_image(image, output: OwlDecodeOutput, text: Optional[List[str]] = None, draw_text=True, redact=False):
-    is_pil = isinstance(image,PIL.Image.Image)
+def markup_image(input_image, output: OwlDecodeOutput, text: Optional[List[str]] = None, draw_text=True, redact=False):
+    is_pil = isinstance(input_image,PIL.Image.Image)
     if is_pil:
-        image = np.array(image)
+        image = np.array(input_image).copy()
+    else:
+        image = input_image.copy()
 
     if redact:
         h,w = image.shape[:2]
